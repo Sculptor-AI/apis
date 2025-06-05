@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News API Test Page</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-hover-color: #0056b3;
+            --secondary-color: #6c757d;
+            --background-color: #f8f9fa;
+            --card-background-color: #ffffff;
+            --text-color: #212529;
+            --muted-text-color: #6c757d;
+            --border-color: #dee2e6;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+            --border-radius: 0.3rem;
+            --box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+
+        body {
+            font-family: var(--font-family);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        h1 {
+            color: var(--text-color);
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 500;
+        }
+        .controls {
+            background: var(--card-background-color);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            margin-bottom: 30px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px; /* Adjusted padding */
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 15px; /* Adjusted font size */
+            transition: background-color 0.2s ease-in-out;
+            text-transform: capitalize;
+        }
+        .button:hover {
+            background: var(--primary-hover-color);
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .controls select {
+            padding: 10px;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            font-size: 15px;
+            background-color: white;
+        }
+
+        .stats {
+            background: transparent; /* Removed background from stats container */
+            box-shadow: none; /* Removed shadow from stats container */
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); /* Adjusted minmax */
+            gap: 20px; /* Increased gap */
+        }
+        .stat-item {
+            text-align: center;
+            padding: 20px; /* Increased padding */
+            background: var(--card-background-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        .stat-value {
+            font-size: 28px; /* Increased font size */
+            font-weight: 600; /* Adjusted font weight */
+            color: var(--primary-color);
+        }
+        .stat-label {
+            color: var(--muted-text-color);
+            font-size: 14px;
+            margin-top: 8px; /* Increased margin */
+        }
+        .articles {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); /* Adjusted minmax */
+            gap: 20px;
+        }
+        .article {
+            background: var(--card-background-color);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column; /* Ensure footer is at bottom */
+        }
+        .article:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1);
+        }
+        .article h3 {
+            margin-top: 0;
+            margin-bottom: 10px; /* Added margin */
+            color: var(--text-color);
+            font-size: 18px; /* Adjusted font size */
+            line-height: 1.4;
+            font-weight: 500;
+        }
+        .article-meta {
+            color: var(--muted-text-color);
+            font-size: 13px; /* Adjusted font size */
+            margin-bottom: 15px; /* Increased margin */
+        }
+        .article-summary {
+            color: #555;
+            line-height: 1.5;
+            margin-bottom: 15px; /* Increased margin */
+            flex-grow: 1; /* Allow summary to grow */
+        }
+        .article-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: auto; /* Pushes footer to bottom */
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+        .topic-badge {
+            background: #e9ecef;
+            padding: 5px 10px; /* Adjusted padding */
+            border-radius: var(--border-radius);
+            font-size: 12px;
+            color: #495057;
+            font-weight: 500;
+        }
+        .read-more {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .read-more:hover {
+            text-decoration: underline;
+            color: var(--primary-hover-color);
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--muted-text-color);
+            font-size: 16px;
+        }
+        #message { /* Styling for the message div */
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .error {
+            background: #f8d7da; /* Kept original for distinctness */
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            background: #d4edda; /* Kept original for distinctness */
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6); /* Darker overlay */
+            z-index: 1000;
+            overflow-y: auto; /* Allow modal itself to scroll if content too tall */
+        }
+        .modal-content {
+            background: var(--card-background-color);
+            max-width: 800px;
+            margin: 5% auto; /* Percentage margin for better responsiveness */
+            padding: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+            position: relative; /* For close button positioning */
+        }
+        .close {
+            position: absolute; /* Position close button within modal-content */
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: var(--muted-text-color);
+            line-height: 1;
+        }
+        .close:hover {
+            color: var(--text-color);
+        }
+        .article-content {
+            line-height: 1.7; /* Improved readability */
+            color: var(--text-color);
+        }
+        .article-content h1, .article-content h2, .article-content h3 { /* Consistent heading styles in modal */
+            color: var(--text-color);
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+        .article-content p {
+            margin-bottom: 15px;
+        }
+        .sources {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+        .sources h4 {
+            margin-bottom: 10px;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+        .source-item {
+            margin-bottom: 8px; /* Increased spacing */
+            font-size: 14px;
+        }
+        .source-item a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        .source-item a:hover {
+            text-decoration: underline;
+            color: var(--primary-hover-color);
+        }
+    </style>
+</head>
+<body>
+    <h1>News Generation API Test Page</h1>
+    
+    <div id="message"></div>
+    
+    <div class="controls">
+        <button class="button" onclick="loadArticles()">Refresh Articles</button>
+        <button class="button" onclick="generateNews()">Generate News Cycle</button>
+        <button class="button" id="forceGenerateButton" onclick="forceGenerateNews()">Force Generate News Cycle</button>
+        <button class="button" onclick="loadStats()">Update Stats</button>
+        <select id="topicFilter" onchange="loadArticles()">
+            <option value="">All Topics</option>
+        </select>
+    </div>
+    
+    <div class="stats" id="stats">
+        <div class="stat-item">
+            <div class="stat-value">-</div>
+            <div class="stat-label">Total Articles</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">-</div>
+            <div class="stat-label">Topics</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">-</div>
+            <div class="stat-label">Next Generation</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">-</div>
+            <div class="stat-label">System Status</div>
+        </div>
+    </div>
+    
+    <div id="articles" class="articles">
+        <div class="loading">Loading articles...</div>
+    </div>
+    
+    <div id="articleModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        
+        async function loadArticles() {
+            const topicFilter = document.getElementById('topicFilter').value;
+            const url = topicFilter 
+                ? `${API_BASE}/news/topic/${topicFilter}`
+                : `${API_BASE}/news?limit=50`;
+                
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const articles = data.data.articles || data.data;
+                    displayArticles(articles);
+                } else {
+                    showMessage('Failed to load articles', 'error');
+                }
+            } catch (error) {
+                showMessage('Error loading articles: ' + error.message, 'error');
+            }
+        }
+        
+        function displayArticles(articles) {
+            const container = document.getElementById('articles');
+            
+            if (articles.length === 0) {
+                container.innerHTML = '<div class="loading">No articles found. Click "Generate News Cycle" to create some!</div>';
+                return;
+            }
+            
+            container.innerHTML = articles.map(article => `
+                <div class="article">
+                    <h3>${article.headline}</h3>
+                    <div class="article-meta">
+                        ${new Date(article.publishedAt).toLocaleDateString()} • 
+                        ${article.metadata.readingTime} min read • 
+                        ${article.metadata.wordCount} words
+                    </div>
+                    <div class="article-summary">${article.summary}</div>
+                    <div class="article-footer">
+                        <span class="topic-badge">${article.topicName}</span>
+                        <a href="#" class="read-more" onclick="showArticle('${article.id}'); return false;">Read more →</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function showArticle(id) {
+            try {
+                const response = await fetch(`${API_BASE}/news/${id}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const article = data.data;
+                    const modalContent = document.getElementById('modalContent');
+                    
+                    if (article.content) {
+                        modalContent.innerHTML = marked.parse(article.content);
+                    } else {
+                        modalContent.innerHTML = '<p>No content available.</p>';
+                    }
+                    
+                    if (article.sources && article.sources.length > 0) {
+                        let sourcesHtml = '<div class="sources"><h4>Sources</h4>';
+                        sourcesHtml += article.sources.map(source => `
+                            <div class="source-item">
+                                [${source.id}] <a href="${source.uri}" target="_blank">${source.title || source.uri}</a>
+                            </div>
+                        `).join('');
+                        sourcesHtml += '</div>';
+                        modalContent.innerHTML += sourcesHtml;
+                    }
+                    
+                    document.getElementById('articleModal').style.display = 'block';
+                } else {
+                    showMessage(data.error || 'Error loading article details', 'error');
+                }
+            } catch (error) {
+                showMessage('Error loading article: ' + error.message, 'error');
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('articleModal').style.display = 'none';
+        }
+        
+        async function generateNews() {
+            if (!confirm('Start a new news generation cycle?')) return;
+            
+            showMessage('Starting news generation...', 'success');
+            
+            try {
+                const response = await fetch(`${API_BASE}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: false })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`News generation started! ${data.data.message}`, 'success');
+                    setTimeout(() => {
+                        loadArticles();
+                        loadStats();
+                    }, 5000);
+                } else {
+                    showMessage(data.error || 'Generation failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Error generating news: ' + error.message, 'error');
+            }
+        }
+        
+        async function forceGenerateNews() {
+            if (!confirm('Force start a new news generation cycle? This might override existing schedules or configurations.')) return;
+            
+            showMessage('Starting FORCE news generation...', 'success');
+            
+            try {
+                const response = await fetch(`${API_BASE}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`FORCE News generation started! ${data.data.message}`, 'success');
+                    setTimeout(() => {
+                        loadArticles();
+                        loadStats();
+                    }, 5000);
+                } else {
+                    showMessage(data.error || 'FORCE Generation failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Error FORCE generating news: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadStats() {
+            try {
+                const [statsResponse, topicsResponse, healthResponse] = await Promise.all([
+                    fetch(`${API_BASE}/stats`),
+                    fetch(`${API_BASE}/topics`),
+                    fetch(`${API_BASE}/health`)
+                ]);
+                
+                const stats = await statsResponse.json();
+                const topics = await topicsResponse.json();
+                const health = await healthResponse.json();
+                
+                if (stats.success && topics.success && health.success) {
+                    updateStatsDisplay(stats.data, topics.data, health.data);
+                    updateTopicFilter(topics.data.topics);
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        function updateStatsDisplay(stats, topicsData, health) {
+            const statsContainer = document.getElementById('stats');
+            const nextGen = stats.nextGenerationTime 
+                ? new Date(stats.nextGenerationTime).toLocaleTimeString() 
+                : 'Not scheduled';
+            
+            statsContainer.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${stats.totalArticles}</div>
+                    <div class="stat-label">Total Articles</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${topicsData.topics.length}</div>
+                    <div class="stat-label">Topics</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${nextGen}</div>
+                    <div class="stat-label">Next Generation</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${health.status}</div>
+                    <div class="stat-label">System Status</div>
+                </div>
+            `;
+        }
+        
+        function updateTopicFilter(topics) {
+            const select = document.getElementById('topicFilter');
+            const currentValue = select.value;
+            
+            select.innerHTML = '<option value="">All Topics</option>' + 
+                topics.map(topic => `
+                    <option value="${topic.id}">${topic.name}</option>
+                `).join('');
+            
+            select.value = currentValue;
+        }
+        
+        function showMessage(message, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            
+            setTimeout(() => {
+                messageDiv.textContent = '';
+                messageDiv.className = '';
+            }, 5000);
+        }
+        
+        // Click outside modal to close
+        window.onclick = function(event) {
+            const modal = document.getElementById('articleModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+        
+        // Initialize
+        loadArticles();
+        loadStats();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            loadArticles();
+            loadStats();
+        }, 30000);
+    </script>
+</body>
+</html> 

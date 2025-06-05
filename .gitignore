@@ -15,3 +15,6 @@ venv.bak/
 .ipynb_checkpoints 
 .env 
 deep-research-demo/
+
+# Allow .env.example files
+!.env.example
