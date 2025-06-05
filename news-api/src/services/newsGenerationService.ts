@@ -4,18 +4,18 @@ import {
   NewsArticle,
   NewsGenerationTask,
   NewsGenerationCycle,
-  NewsTopic,
-  Source
+  Source,
+  ArticleAssignment,
+  ArticleSelectionCriteria,
+  NewsArticleEnhanced
 } from '../types';
 import {
-  analyzeNewsTopic,
-  configureNewsAgents,
-  runNewsResearchAgent,
-  synthesizeNewsArticle,
   extractHeadlineFromContent
 } from './geminiService';
 import { getStorageService } from './storageService';
 import { ConfigService } from './configService';
+import { NewsDiscoveryService } from './newsDiscoveryService';
+import { ArticleSelectionService } from './articleSelectionService';
 import logger from '../utils/logger';
 
 export class NewsGenerationService {
@@ -24,9 +24,13 @@ export class NewsGenerationService {
   private currentCycle: NewsGenerationCycle | null = null;
   private configService: ConfigService;
   private storageService = getStorageService();
+  private discoveryService: NewsDiscoveryService;
+  private selectionService: ArticleSelectionService;
 
   private constructor() {
     this.configService = ConfigService.getInstance();
+    this.discoveryService = NewsDiscoveryService.getInstance();
+    this.selectionService = ArticleSelectionService.getInstance();
   }
 
   static getInstance(): NewsGenerationService {
@@ -43,7 +47,6 @@ export class NewsGenerationService {
 
     this.isGenerating = true;
     const config = this.configService.getConfig();
-    const topicsConfig = this.configService.getTopicsConfig();
 
     const cycle: NewsGenerationCycle = {
       id: uuidv4(),
@@ -58,34 +61,72 @@ export class NewsGenerationService {
     await this.storageService.saveGenerationCycle(cycle);
 
     try {
-      // Clean up expired articles first
+      // Step 1: Clean up expired articles first
       const expiredArticles = await this.storageService.getExpiredArticles();
       for (const article of expiredArticles) {
         await this.storageService.deleteArticle(article.id);
         cycle.articlesDeleted++;
       }
 
-      // Determine which topics need articles
-      const topicsNeedingArticles = await this.determineTopicsNeedingArticles(topicsConfig.topics);
+      // Step 2: Discover recent news events
+      logger.info('Discovering recent news events...');
+      const newsDiscovery = await this.discoveryService.discoverRecentNews(24);
       
-      // Create generation tasks
-      const tasks: NewsGenerationTask[] = [];
-      for (const { topic, count } of topicsNeedingArticles) {
-        for (let i = 0; i < count; i++) {
-          const task: NewsGenerationTask = {
-            id: uuidv4(),
-            topicId: topic.id,
-            topicName: topic.name,
-            status: 'pending',
-            progress: 0,
-            startedAt: new Date()
-          };
-          tasks.push(task);
-          cycle.tasks.push(task);
-        }
+      // Also get trending stories
+      const trendingStories = await this.discoveryService.findTrendingStories();
+      newsDiscovery.events.push(...trendingStories);
+
+      logger.info(`Found ${newsDiscovery.events.length} news events`);
+
+      // Step 3: Get current articles and identify coverage gaps
+      const currentArticles = await this.storageService.getArticles({ limit: 100 });
+      const coverageGaps = await this.discoveryService.identifyCoverageGaps(currentArticles);
+
+      // Step 4: Use AI to select which articles to write
+      const selectionCriteria: ArticleSelectionCriteria = {
+        currentArticles,
+        recentEvents: newsDiscovery.events,
+        coverageGaps,
+        storyCluster: [] // Will implement story clustering later
+      };
+
+      // Determine how many articles to generate
+      const currentCount = await this.storageService.getArticleCount();
+      const articlesToGenerate = Math.min(
+        config.maxArticleCount - currentCount,
+        Math.max(1, config.targetArticleCount - currentCount)
+      );
+
+      if (articlesToGenerate <= 0 && !force) {
+        logger.info('Already at target article count');
+        cycle.status = 'completed';
+        cycle.completedAt = new Date();
+        await this.storageService.saveGenerationCycle(cycle);
+        return cycle;
       }
 
-      // Process tasks with concurrency limit
+      // Step 5: Get article assignments from AI
+      const assignments = await this.selectionService.selectNextArticles(
+        selectionCriteria,
+        force ? Math.max(3, articlesToGenerate) : articlesToGenerate
+      );
+
+      logger.info(`AI selected ${assignments.length} articles to write`);
+
+      // Step 6: Create generation tasks from assignments
+      const tasks: NewsGenerationTask[] = assignments.map(assignment => ({
+        id: uuidv4(),
+        topicId: assignment.topicId,
+        topicName: this.getTopicName(assignment.topicId),
+        status: 'pending',
+        progress: 0,
+        startedAt: new Date(),
+        assignment // Store the assignment for later use
+      } as any));
+
+      cycle.tasks = tasks;
+
+      // Step 7: Process tasks with concurrency limit
       const maxConcurrent = config.maxConcurrentArticleGeneration;
       const results = await this.processTasksConcurrently(tasks, maxConcurrent);
 
@@ -110,62 +151,15 @@ export class NewsGenerationService {
     } finally {
       this.isGenerating = false;
       this.currentCycle = null;
+      logger.info('Generation cycle finished and state reset.');
     }
 
     return cycle;
   }
 
-  private async determineTopicsNeedingArticles(
-    topics: NewsTopic[]
-  ): Promise<{ topic: NewsTopic; count: number }[]> {
-    const config = this.configService.getConfig();
-    const topicsConfig = this.configService.getTopicsConfig();
-    const currentCount = await this.storageService.getArticleCount();
-    
-    const result: { topic: NewsTopic; count: number }[] = [];
-    
-    // If we're below minimum, generate articles for all topics
-    if (currentCount < config.minArticleCount) {
-      const articlesNeeded = config.targetArticleCount - currentCount;
-      const articlesPerTopic = Math.ceil(articlesNeeded / topics.length);
-      
-      for (const topic of topics) {
-        const topicCount = await this.storageService.getArticleCountByTopic(topic.id);
-        const needed = Math.min(
-          articlesPerTopic,
-          topic.maxArticles - topicCount
-        );
-        if (needed > 0) {
-          result.push({ topic, count: needed });
-        }
-      }
-      return result;
-    }
-
-    // Otherwise, check each topic's requirements
-    for (const topic of topics) {
-      const topicCount = await this.storageService.getArticleCountByTopic(topic.id);
-      
-      if (topicCount < topic.minArticles) {
-        // Topic is below minimum
-        result.push({ 
-          topic, 
-          count: topic.minArticles - topicCount 
-        });
-      } else if (currentCount < config.targetArticleCount && topicCount < topic.maxArticles) {
-        // We're below target and topic has room
-        const weight = topicsConfig.settings.balanceTopics
-          ? (topic.priority / 5) * topicsConfig.settings.priorityWeight + 
-            Math.random() * topicsConfig.settings.randomWeight
-          : 1;
-        
-        if (weight > 0.5) {
-          result.push({ topic, count: 1 });
-        }
-      }
-    }
-
-    return result;
+  private getTopicName(topicId: string): string {
+    const topic = this.configService.getTopicsConfig().topics.find(t => t.id === topicId);
+    return topic?.name || topicId;
   }
 
   private async processTasksConcurrently(
@@ -206,11 +200,10 @@ export class NewsGenerationService {
 
   private async generateArticleForTask(task: NewsGenerationTask): Promise<string> {
     const config = this.configService.getConfig();
-    const topicsConfig = this.configService.getTopicsConfig();
-    const topic = topicsConfig.topics.find(t => t.id === task.topicId);
+    const assignment: ArticleAssignment = (task as any).assignment;
     
-    if (!topic) {
-      throw new Error(`Topic ${task.topicId} not found`);
+    if (!assignment) {
+      throw new Error(`No assignment found for task ${task.id}`);
     }
 
     try {
@@ -218,23 +211,29 @@ export class NewsGenerationService {
       task.status = 'researching';
       task.progress = 10;
 
-      // Step 1: Analyze topic and get research questions
-      logger.debug('Analyzing news topic', { topic: topic.name });
-      const topicAnalysis = await analyzeNewsTopic(topic);
-      task.progress = 20;
+      // Step 1: Get the news event details if available
+      let eventContext = '';
+      if (assignment.eventId) {
+        // In a real implementation, we'd fetch the event from storage
+        eventContext = `Breaking news about: ${assignment.suggestedHeadline}`;
+      } else {
+        eventContext = assignment.angle;
+      }
 
-      // Step 2: Configure research agents
-      logger.debug('Configuring research agents', { questions: topicAnalysis.researchQuestions.length });
-      const agents = await configureNewsAgents(
-        topic.name,
-        topicAnalysis.researchQuestions.slice(0, config.researchAgentsPerArticle)
+      // Step 2: Configure specialized news research agents
+      logger.debug('Configuring news research agents', { angle: assignment.angle });
+      const agents = await this.configureNewsAgents(
+        eventContext,
+        assignment.researchFocus.slice(0, config.researchAgentsPerArticle)
       );
       task.progress = 30;
 
-      // Step 3: Run research agents in parallel
+      // Step 3: Run research agents in parallel with news focus
       task.status = 'researching';
-      logger.debug('Running research agents', { count: agents.length });
-      const researchPromises = agents.map(agent => runNewsResearchAgent(agent));
+      logger.debug('Running news research agents', { count: agents.length });
+      const researchPromises = agents.map(agent => 
+        this.runNewsResearchAgent(agent, eventContext)
+      );
       const researchResults = await Promise.all(researchPromises);
       task.progress = 70;
 
@@ -255,36 +254,29 @@ export class NewsGenerationService {
         }
       }
 
-      // Step 4: Synthesize article
+      // Step 4: Synthesize news article with focus on timeliness
       task.status = 'writing';
-      logger.debug('Synthesizing article');
-      const { content, summary } = await synthesizeNewsArticle(
-        topicAnalysis.suggestedHeadline,
+      logger.debug('Synthesizing news article');
+      const { content, summary } = await this.synthesizeNewsArticle(
+        assignment.suggestedHeadline,
         researchResults,
-        allSources
+        allSources,
+        assignment.newsType
       );
       task.progress = 90;
 
       // Extract final headline from content
-      let finalHeadline = extractHeadlineFromContent(content);
-      
-      // Prioritize the suggested headline if extraction fails or returns default
-      if ((finalHeadline === 'Untitled Article' || !finalHeadline) && topicAnalysis.suggestedHeadline) {
-        finalHeadline = topicAnalysis.suggestedHeadline;
-      } else if (!finalHeadline && !topicAnalysis.suggestedHeadline) {
-        // As a last resort, if both are empty, use a generic placeholder
-        finalHeadline = 'Untitled Article'; 
-      }
+      const finalHeadline = extractHeadlineFromContent(content) || assignment.suggestedHeadline;
 
       // Calculate metadata
       const wordCount = content.split(/\s+/).length;
-      const readingTime = Math.ceil(wordCount / 200); // Assuming 200 words per minute
+      const readingTime = Math.ceil(wordCount / 200);
 
-      // Create article
-      const article: NewsArticle = {
+      // Create enhanced news article
+      const article: NewsArticleEnhanced = {
         id: uuidv4(),
-        topicId: topic.id,
-        topicName: topic.name,
+        topicId: assignment.topicId,
+        topicName: this.getTopicName(assignment.topicId),
         headline: finalHeadline,
         summary,
         content,
@@ -297,8 +289,13 @@ export class NewsGenerationService {
         metadata: {
           readingTime,
           wordCount,
-          tags: topic.keywords.slice(0, 5)
-        }
+          tags: this.extractTags(assignment, content)
+        },
+        // Enhanced fields
+        newsType: assignment.newsType,
+        eventDate: assignment.eventId ? new Date() : undefined,
+        storyAngle: assignment.angle,
+        exclusivityScore: 0.8 // High score for unique angles
       };
 
       // Save article
@@ -310,9 +307,9 @@ export class NewsGenerationService {
       task.completedAt = new Date();
       task.articleId = article.id;
 
-      logger.info('Article generated successfully', {
+      logger.info('News article generated successfully', {
         articleId: article.id,
-        topic: topic.name,
+        newsType: article.newsType,
         headline: finalHeadline
       });
 
@@ -324,6 +321,65 @@ export class NewsGenerationService {
       task.completedAt = new Date();
       throw error;
     }
+  }
+
+  private async configureNewsAgents(eventContext: string, researchFocus: string[]): Promise<any[]> {
+    // Import the function from constants
+    const { configureNewsAgents } = await import('./geminiService');
+    
+    return configureNewsAgents(eventContext, researchFocus);
+  }
+
+  private async runNewsResearchAgent(agent: any, eventContext: string): Promise<any> {
+    const { runNewsResearchAgent } = await import('./geminiService');
+    
+    // Add event context to the agent
+    const enhancedAgent = {
+      ...agent,
+      eventContext
+    };
+    
+    return runNewsResearchAgent(enhancedAgent);
+  }
+
+  private async synthesizeNewsArticle(
+    headline: string,
+    researchResults: any[],
+    sources: Source[],
+    newsType: string
+  ): Promise<{ content: string; summary: string }> {
+    const { synthesizeNewsArticle } = await import('./geminiService');
+    
+    // Add news type context to synthesis
+    const enhancedResults = researchResults.map(r => ({
+      ...r,
+      newsType
+    }));
+    
+    return synthesizeNewsArticle(headline, enhancedResults, sources);
+  }
+
+  private extractTags(assignment: ArticleAssignment, content: string): string[] {
+    const tags: string[] = [];
+    
+    // Add news type as tag
+    tags.push(assignment.newsType);
+    
+    // Add topic-based tags
+    const topic = this.configService.getTopicsConfig().topics.find(t => t.id === assignment.topicId);
+    if (topic) {
+      tags.push(...topic.keywords.slice(0, 3));
+    }
+    
+    // Extract additional tags from content (simple implementation)
+    const importantWords = content
+      .split(/\s+/)
+      .filter(word => word.length > 6 && word[0] === word[0].toUpperCase())
+      .slice(0, 2);
+    
+    tags.push(...importantWords);
+    
+    return [...new Set(tags)].slice(0, 5);
   }
 
   async generateSingleArticle(topicId: string): Promise<NewsArticle> {

@@ -1,4 +1,4 @@
-import { GoogleGenAI, GenerateContentResponse, GenerateContentParameters, HarmCategory, HarmBlockThreshold, Part, Type } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, GenerateContentParameters, Type } from "@google/genai";
 import { 
   NewsResearchAgent, 
   Source, 
@@ -9,9 +9,9 @@ import {
   GEMINI_FLASH_MODEL,
   GEMINI_PRO_MODEL,
   NEWS_TOPIC_ANALYSIS_PROMPT,
-  RESEARCH_AGENT_PROMPT,
+  NEWS_RESEARCH_AGENT_PROMPT,
   NEWS_SYNTHESIS_PROMPT,
-  AGENT_CONFIGURATION_PROMPT
+  NEWS_AGENT_CONFIGURATION_PROMPT
 } from '../constants';
 import logger from '../utils/logger';
 
@@ -121,7 +121,7 @@ export const configureNewsAgents = async (
     throw new Error("Gemini service not initialized");
   }
 
-  const prompt = AGENT_CONFIGURATION_PROMPT(topic, researchQuestions);
+  const prompt = NEWS_AGENT_CONFIGURATION_PROMPT(topic, researchQuestions);
 
   const agentConfigurationResponseSchema = {
     type: Type.OBJECT,
@@ -191,16 +191,17 @@ export const configureNewsAgents = async (
 
 // Run a single research agent
 export const runNewsResearchAgent = async (
-  agent: NewsResearchAgent
+  agent: NewsResearchAgent & { eventContext?: string }
 ): Promise<AgentResearchResult> => {
   if (!ai) {
     throw new Error("Gemini service not initialized");
   }
 
-  const prompt = RESEARCH_AGENT_PROMPT(
+  const prompt = NEWS_RESEARCH_AGENT_PROMPT(
     agent.name,
     agent.focus,
-    agent.researchQuestion || ''
+    agent.researchQuestion || '',
+    agent.eventContext || ''
   );
 
   try {
@@ -296,7 +297,7 @@ Generate the news article now.`;
     const content = response.text || '';
 
     // Extract summary (first paragraph after headline)
-    const lines = content.split('\n').filter(line => line.trim());
+    const lines = content.split('\n').filter((line: string) => line.trim());
     let summary = '';
     let foundHeadline = false;
     

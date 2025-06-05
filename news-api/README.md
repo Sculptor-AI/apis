@@ -9,10 +9,17 @@ An autonomous news generation system that creates professional news articles usi
 
 ## 🚀 Features
 
-- **🤖 Autonomous News Generation**: Automatically generates news articles on a configurable schedule
-- **👥 Multi-Agent Research**: Uses up to 5 specialized AI research agents per article
-- **📰 Topic-Based System**: Organizes news by configurable topics with balanced coverage
+- **🔍 Real-Time News Discovery**: Automatically discovers breaking news and trending stories
+- **🤖 AI-Driven Article Selection**: Intelligent selection of news angles based on current events and coverage gaps
+- **📰 News-Focused Writing**: Creates timely, professional news articles with proper attribution
+- **👥 Multi-Agent Research**: Specialized agents for breaking news, verification, impact analysis, and data
+- **📊 Coverage Analysis**: Identifies gaps in current coverage and suggests new angles
 - **⏰ Lifecycle Management**: Automatic article expiration and cleanup
+- **🎯 Smart Topic Balance**: AI ensures diverse coverage across all configured topics
+- **📈 Trending Detection**: Identifies and prioritizes trending stories
+- **🔄 Story Evolution**: Tracks developing stories and suggests updates
+- **🤖 Autonomous News Generation**: Automatically generates news articles on a configurable schedule
+- **📰 Topic-Based System**: Organizes news by configurable topics with balanced coverage
 - **📊 Real-time Statistics**: Track article counts, generation cycles, and system health
 - **🔄 Manual Triggers**: Generate news on-demand via API or command line
 - **📝 Professional Output**: Creates well-structured articles with headlines, summaries, and citations
@@ -20,12 +27,13 @@ An autonomous news generation system that creates professional news articles usi
 
 ## 🏗️ Architecture
 
-The system uses a multi-agent approach where:
-1. **Topic Analysis**: Gemini analyzes the topic and generates research questions
-2. **Agent Configuration**: Specialized agents are configured for each research question
-3. **Parallel Research**: Agents conduct research simultaneously using Google Search
-4. **Article Synthesis**: Gemini Pro synthesizes research into a professional news article
-5. **Lifecycle Management**: Articles are stored, served, and expired automatically
+The system uses an intelligent news generation pipeline:
+
+1. **News Discovery**: Continuously scans for breaking news and recent developments
+2. **AI Selection**: Analyzes current coverage and selects the most newsworthy angles
+3. **Specialized Research**: Deploys targeted agents to research specific aspects
+4. **Professional Synthesis**: Creates properly formatted news articles with citations
+5. **Smart Publishing**: Manages article lifecycle and maintains optimal coverage
 
 ## 📋 Prerequisites
 
@@ -103,6 +111,32 @@ GET /api/news/{articleId}
 ```http
 GET /api/news/topic/{topicId}
 ```
+
+### News Discovery
+
+#### Discover Recent News
+```http
+GET /api/news/discover?hours=24
+```
+Returns recent news events from the specified time period.
+
+#### Get Trending Stories
+```http
+GET /api/news/trending
+```
+Returns the top trending news stories across all topics.
+
+#### Analyze Coverage Gaps
+```http
+GET /api/news/coverage-gaps
+```
+Analyzes current coverage and identifies missing angles.
+
+#### Get News Mix Analysis
+```http
+GET /api/news/analysis
+```
+Returns detailed analysis of current article mix.
 
 ### Generation Control
 
@@ -195,17 +229,33 @@ GEMINI_SYNTHESIS_MODEL=gemini-2.5-pro-preview-05-06
 - `0 9,18 * * *` - Twice daily at 9 AM and 6 PM
 - `0 */6 * * *` - Every 6 hours (default)
 
-## 🔄 News Generation Process
+## 📰 News Generation Process
 
-1. **Topic Selection**: System determines which topics need articles based on current counts and priorities
-2. **Topic Analysis**: Gemini analyzes each topic and generates:
-   - A current news angle
-   - A suggested headline
-   - 3-5 research questions
-3. **Agent Configuration**: Research agents are configured with specific focuses
-4. **Parallel Research**: Agents conduct research using Google Search
-5. **Article Synthesis**: Gemini Pro synthesizes research into a professional article
-6. **Publication**: Articles are stored with metadata and made available via API
+### 1. Discovery Phase
+- Scans for news events from the last 24-48 hours
+- Identifies trending stories across all topics
+- Prioritizes breaking news and major developments
+
+### 2. Selection Phase
+- AI analyzes current article mix
+- Identifies coverage gaps and missing angles
+- Selects diverse article types (breaking, analysis, updates, explainers)
+- Avoids duplicate coverage
+
+### 3. Research Phase
+- Configures specialized agents:
+  - **Breaking News Tracker**: Latest updates
+  - **Source Verifier**: Official statements
+  - **Impact Analyst**: Effects and implications
+  - **Data Hunter**: Statistics and facts
+  - **Context Provider**: Background information
+
+### 4. Writing Phase
+- Creates news-style headlines with specifics
+- Writes compelling ledes answering 5 W's
+- Uses inverted pyramid structure
+- Includes time markers and attribution
+- Professional AP/Reuters style
 
 ## 📊 Article Lifecycle
 

@@ -8,6 +8,8 @@ import rateLimit from 'express-rate-limit';
 import { ConfigService } from './services/configService';
 import { initializeGeminiService } from './services/geminiService';
 import { SchedulerService } from './services/schedulerService';
+import { NewsDiscoveryService } from './services/newsDiscoveryService';
+import { ArticleSelectionService } from './services/articleSelectionService';
 import newsRoutes from './routes/newsRoutes';
 import logger from './utils/logger';
 import { API_ENDPOINTS } from './constants';
@@ -25,9 +27,18 @@ if (!validation.valid) {
 
 // Initialize Gemini service
 try {
+  const { GoogleGenAI } = require('@google/genai');
+  const ai = new GoogleGenAI({ apiKey: config.apiKey });
+  
   initializeGeminiService(config.apiKey);
+  
+  // Initialize new services with AI instance
+  NewsDiscoveryService.getInstance().setAI(ai);
+  ArticleSelectionService.getInstance().setAI(ai);
+  
+  logger.info('All AI services initialized successfully');
 } catch (error) {
-  logger.error('Failed to initialize Gemini service', { error });
+  logger.error('Failed to initialize services', { error });
   process.exit(1);
 }
 

@@ -11,10 +11,10 @@ import logger from '../utils/logger';
 import { ConfigService } from './configService';
 
 // Helper to ensure data directory exists
-const ensureDataDirectoryExists = (filePath: string) => {
+const ensureDataDirectoryExists = (filePath: string): void => {
   const dirname = path.dirname(filePath);
   if (fs.existsSync(dirname)) {
-    return true;
+    return;
   }
   fs.mkdirSync(dirname, { recursive: true });
 };

@@ -175,4 +175,105 @@ export interface NewsStorageService {
   getArticlesByTopic(topicId: string): Promise<NewsArticle[]>;
   getExpiredArticles(): Promise<NewsArticle[]>;
   getStats(): Promise<NewsStats>;
+}
+
+// News Discovery Types
+export interface NewsEvent {
+  id: string;
+  topicId: string;
+  headline: string;
+  summary: string;
+  eventDate: Date;
+  discoveredAt: Date;
+  source: string;
+  importance: 'breaking' | 'major' | 'standard' | 'minor';
+  keywords: string[];
+  relatedEvents?: string[];
+}
+
+export interface NewsDiscoveryResult {
+  events: NewsEvent[];
+  trendingTopics: string[];
+  coverageGaps: CoverageGap[];
+}
+
+export interface CoverageGap {
+  topicId: string;
+  angle: string;
+  reason: string;
+  importance: number; // 1-10
+}
+
+// Story Tracking Types
+export interface StoryCluster {
+  id: string;
+  primaryEvent: string;
+  relatedArticles: string[];
+  timeline: StoryEvent[];
+  lastUpdated: Date;
+  status: 'developing' | 'stable' | 'concluded';
+}
+
+export interface StoryEvent {
+  date: Date;
+  description: string;
+  articleId?: string;
+}
+
+// Enhanced Article Types
+export interface NewsArticleEnhanced extends NewsArticle {
+  newsType: 'breaking' | 'analysis' | 'update' | 'feature' | 'explainer';
+  eventDate?: Date;
+  storyAngle: string;
+  relatedArticles?: string[];
+  storyClusterId?: string;
+  exclusivityScore: number; // 0-1, how unique is this angle
+}
+
+// Article Selection Types
+export interface ArticleSelectionCriteria {
+  currentArticles: NewsArticle[];
+  recentEvents: NewsEvent[];
+  coverageGaps: CoverageGap[];
+  storyCluster: StoryCluster[];
+}
+
+export interface ArticleAssignment {
+  topicId: string;
+  eventId?: string;
+  angle: string;
+  newsType: 'breaking' | 'analysis' | 'update' | 'feature' | 'explainer';
+  priority: number;
+  researchFocus: string[];
+  suggestedHeadline: string;
+}
+
+// News Analysis Types
+export interface NewsAnalysisResult {
+  mainEvent: string;
+  keyDevelopments: string[];
+  stakeholders: string[];
+  timeline: string;
+  whyNowImportant: string;
+  uniqueAngle: string;
+  suggestedQuestions: string[];
+}
+
+// Service Types
+export interface NewsDiscoveryService {
+  discoverRecentNews(hours?: number): Promise<NewsDiscoveryResult>;
+  findTrendingStories(): Promise<NewsEvent[]>;
+  identifyCoverageGaps(currentArticles: NewsArticle[]): Promise<CoverageGap[]>;
+}
+
+export interface ArticleSelectionService {
+  selectNextArticles(criteria: ArticleSelectionCriteria, count: number): Promise<ArticleAssignment[]>;
+  analyzeCurrentMix(articles: NewsArticle[]): Promise<any>;
+}
+
+export interface StoryTrackingService {
+  trackStory(article: NewsArticle): Promise<void>;
+  getStoryClusters(): Promise<StoryCluster[]>;
+  getStoryCluster(id: string): Promise<StoryCluster | null>;
+  needsUpdate(clusterId: string): Promise<boolean>;
 } 

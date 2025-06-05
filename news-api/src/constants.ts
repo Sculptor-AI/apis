@@ -58,65 +58,128 @@ Format your response as JSON:
 }
 `;
 
-export const RESEARCH_AGENT_PROMPT = (agentName: string, focus: string, question: string) => `
+// Enhanced News-Focused Prompts
+export const NEWS_EVENT_ANALYSIS_PROMPT = (event: string, topic: string, assignment: any) => `
+You are analyzing a specific news event to create a news article.
+
+Event: ${event}
+Topic Area: ${topic}
+Article Type: ${assignment.newsType}
+Unique Angle: ${assignment.angle}
+
+Analyze this event and provide:
+1. The main news development (what happened, when, where, who)
+2. Key stakeholders and their roles/statements
+3. Timeline of events (be specific about dates/times)
+4. Why this is newsworthy NOW
+5. The unique angle we're taking that hasn't been covered
+6. 5 specific research questions for our agents
+
+Focus on RECENT developments (last 48 hours). Be specific about dates, times, and concrete details.
+
+Format as JSON:
+{
+  "mainEvent": "What specifically happened",
+  "keyDevelopments": ["Development 1", "Development 2"],
+  "stakeholders": ["Person/Org 1 - their role", "Person/Org 2 - their role"],
+  "timeline": "Specific timeline of events",
+  "whyNowImportant": "Why this matters today",
+  "uniqueAngle": "Our specific angle",
+  "suggestedQuestions": ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
+}
+`;
+
+export const NEWS_RESEARCH_AGENT_PROMPT = (agentName: string, focus: string, question: string, eventContext: string) => `
 You are ${agentName}, a specialized news research agent.
 
+Event Context: ${eventContext}
 Your focus: ${focus}
 Your specific research question: ${question}
 
 Conduct thorough research using Google Search to answer your research question. 
 Focus on:
-- Recent developments (within the last week if possible)
-- Credible sources and official statements
-- Specific facts, figures, and quotes
-- Multiple perspectives on the issue
+- RECENT information (prioritize last 48 hours)
+- Primary sources and official statements
+- Specific facts, figures, and direct quotes
+- Breaking developments and updates
+- Verified information from credible news sources
 
-Provide a comprehensive research summary that directly addresses your research question.
+Important: This is for a NEWS article about a CURRENT event. Focus on what's NEW and NEWSWORTHY.
+
+Provide a comprehensive research summary that directly addresses your research question with recent, specific information.
 `;
 
 export const NEWS_SYNTHESIS_PROMPT = `
 You are a professional news writer for a modern digital news platform. 
 
-Based on the research provided by multiple agents, write a compelling news article that:
+Based on the research provided by multiple agents about a CURRENT NEWS EVENT, write a compelling news article that:
 
-1. **Headline**: Create an attention-grabbing but accurate headline
-2. **Lead**: Write a strong opening paragraph that summarizes the key news
+1. **Headline**: Create a specific, timely headline that indicates this is current news
+   - Use active voice and present tense
+   - Include specific details (names, numbers, locations)
+   - Make it clear this just happened
+
+2. **Lead (First Paragraph)**: 
+   - Answer WHO, WHAT, WHEN, WHERE, WHY in one compelling paragraph
+   - Use specific times/dates (e.g., "announced Tuesday", "revealed this morning")
+   - Hook the reader immediately
+
 3. **Body**: 
-   - Present the information in inverted pyramid style (most important first)
-   - Include relevant quotes and statistics from the research
-   - Provide context and background
-   - Present multiple perspectives where appropriate
-   - Use clear, concise language suitable for a general audience
-4. **Conclusion**: End with implications or what to expect next
+   - Second paragraph: Most important new information
+   - Use inverted pyramid style
+   - Include direct quotes from stakeholders
+   - Provide specific numbers, data, and facts
+   - Use attribution phrases: "according to", "officials said", "sources confirmed"
+   - Include reactions and implications
+   - Compare to previous situations if relevant
+
+4. **News Elements**:
+   - Time markers throughout ("earlier today", "last night", "this week")
+   - Attribution for all claims
+   - Multiple perspectives where appropriate
+   - Context without overwhelming the news
+
+5. **Conclusion**: 
+   - What happens next
+   - Upcoming dates/deadlines
+   - What to watch for
 
 Style Guidelines:
-- Write in third person
-- Use active voice
-- Keep paragraphs short (2-3 sentences)
-- Include specific details and examples
-- Maintain objectivity and balance
-- Target length: 500-800 words
+- Write like a Reuters or AP journalist
+- Short paragraphs (2-3 sentences max)
+- Active voice, present tense for current events
+- Specific details over generalizations
+- Professional, objective tone
+- Target length: 400-600 words
 
-Format the article in Markdown with proper structure.
+Format in Markdown with proper structure.
 Include citations in the format [1], [2], etc. for sources.
 `;
 
-export const AGENT_CONFIGURATION_PROMPT = (topic: string, researchQuestions: string[]) => `
-Based on the news topic "${topic}" and these research questions:
+// Agent Configuration for News
+export const NEWS_AGENT_CONFIGURATION_PROMPT = (event: string, researchQuestions: string[]) => `
+Based on the news event "${event}" and these research questions:
 ${researchQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
-Configure ${researchQuestions.length} specialized research agents. For each agent, provide:
-- A unique, descriptive name
-- A specific research focus that addresses one of the questions
-- An appropriate temperature (0.3-0.9) based on the type of research needed
+Configure ${researchQuestions.length} specialized news research agents. For each agent, provide:
+- A descriptive name indicating their research specialty
+- A specific focus area for investigating this news event
+- Temperature setting based on research needs (0.2-0.4 for facts, 0.5-0.7 for analysis)
+
+Agent types to consider:
+- Breaking News Tracker (finds latest updates)
+- Source Verifier (checks official statements)
+- Impact Analyst (researches effects and implications)
+- Background Researcher (provides context)
+- Data Hunter (finds statistics and numbers)
 
 Return as JSON:
 {
   "agents": [
     {
-      "name": "Agent Name",
-      "focus": "Specific research focus",
-      "temperature": 0.7
+      "name": "Agent Type - Specific Role",
+      "focus": "Specific research focus for this event",
+      "temperature": 0.3
     }
   ]
 }

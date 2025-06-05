@@ -252,6 +252,63 @@
             text-decoration: underline;
             color: var(--primary-hover-color);
         }
+        
+        /* News type badges */
+        .news-type {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+        .news-type.breaking {
+            background: #dc3545;
+            color: white;
+        }
+        .news-type.analysis {
+            background: #17a2b8;
+            color: white;
+        }
+        .news-type.update {
+            background: #28a745;
+            color: white;
+        }
+        .news-type.feature {
+            background: #6c757d;
+            color: white;
+        }
+        .news-type.explainer {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        /* Article type styling */
+        .article.breaking {
+            border-left: 4px solid #dc3545;
+        }
+        .article.analysis {
+            border-left: 4px solid #17a2b8;
+        }
+        .article.update {
+            border-left: 4px solid #28a745;
+        }
+        
+        /* Discovery modal styles */
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+        .modal-content h3 {
+            margin: 15px 0;
+            color: var(--secondary-color);
+        }
+        .modal-content h4 {
+            margin: 10px 0;
+            color: var(--text-color);
+        }
     </style>
 </head>
 <body>
@@ -264,6 +321,9 @@
         <button class="button" onclick="generateNews()">Generate News Cycle</button>
         <button class="button" id="forceGenerateButton" onclick="forceGenerateNews()">Force Generate News Cycle</button>
         <button class="button" onclick="loadStats()">Update Stats</button>
+        <button class="button" onclick="showTrending()">Show Trending</button>
+        <button class="button" onclick="showDiscovery()">Discover News</button>
+        <button class="button" onclick="showCoverageGaps()">Coverage Analysis</button>
         <select id="topicFilter" onchange="loadArticles()">
             <option value="">All Topics</option>
         </select>
@@ -331,11 +391,14 @@
                 return;
             }
             
-            container.innerHTML = articles.map(article => `
-                <div class="article">
+            container.innerHTML = articles.map(article => {
+                const newsType = article.newsType ? `<span class="news-type ${article.newsType}">${article.newsType.toUpperCase()}</span>` : '';
+                return `
+                <div class="article ${article.newsType || ''}">
+                    ${newsType}
                     <h3>${article.headline}</h3>
                     <div class="article-meta">
-                        ${new Date(article.publishedAt).toLocaleDateString()} • 
+                        ${new Date(article.publishedAt).toLocaleDateString()} ${new Date(article.publishedAt).toLocaleTimeString()} • 
                         ${article.metadata.readingTime} min read • 
                         ${article.metadata.wordCount} words
                     </div>
@@ -345,7 +408,7 @@
                         <a href="#" class="read-more" onclick="showArticle('${article.id}'); return false;">Read more →</a>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
         
         async function showArticle(id) {
@@ -530,6 +593,111 @@
             loadArticles();
             loadStats();
         }, 30000);
+        
+        async function showTrending() {
+            showMessage('Loading trending stories...', 'success');
+            try {
+                const response = await fetch(`${API_BASE}/news/trending`);
+                const data = await response.json();
+                
+                if (data.success && data.data.stories) {
+                    const modal = document.getElementById('articleModal');
+                    const modalContent = document.getElementById('modalContent');
+                    
+                    modalContent.innerHTML = `
+                        <h2>📈 Trending Stories</h2>
+                        <p>Top ${data.data.count} trending news stories right now:</p>
+                        ${data.data.stories.map((story, index) => `
+                            <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid ${story.importance === 'breaking' ? '#dc3545' : '#007bff'};">
+                                <h3>${index + 1}. ${story.headline}</h3>
+                                <p><strong>Topic:</strong> ${story.topicId} | <strong>Importance:</strong> ${story.importance}</p>
+                                <p>${story.summary}</p>
+                                <p style="color: #666; font-size: 0.9em;">Source: ${story.source} | ${new Date(story.eventDate).toLocaleString()}</p>
+                            </div>
+                        `).join('')}
+                    `;
+                    
+                    modal.style.display = 'block';
+                } else {
+                    showMessage('No trending stories found', 'error');
+                }
+            } catch (error) {
+                showMessage('Error loading trending stories: ' + error.message, 'error');
+            }
+        }
+        
+        async function showDiscovery() {
+            showMessage('Discovering recent news...', 'success');
+            try {
+                const response = await fetch(`${API_BASE}/news/discover?hours=24`);
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const modal = document.getElementById('articleModal');
+                    const modalContent = document.getElementById('modalContent');
+                    
+                    modalContent.innerHTML = `
+                        <h2>🔍 Recent News Discovery</h2>
+                        <p>Found ${data.data.events.length} news events in the last 24 hours</p>
+                        <h3>Trending Topics: ${data.data.trendingTopics.join(', ') || 'None'}</h3>
+                        <div style="max-height: 500px; overflow-y: auto;">
+                        ${data.data.events.map(event => `
+                            <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid ${
+                                event.importance === 'breaking' ? '#dc3545' : 
+                                event.importance === 'major' ? '#ff6b6b' : 
+                                event.importance === 'standard' ? '#007bff' : '#6c757d'
+                            };">
+                                <h4>${event.headline}</h4>
+                                <p><strong>${event.topicId}</strong> - ${event.importance}</p>
+                                <p>${event.summary}</p>
+                                <p style="color: #666; font-size: 0.9em;">Source: ${event.source} | ${new Date(event.eventDate).toLocaleString()}</p>
+                                <p style="color: #999; font-size: 0.8em;">Keywords: ${event.keywords.join(', ')}</p>
+                            </div>
+                        `).join('')}
+                        </div>
+                    `;
+                    
+                    modal.style.display = 'block';
+                } else {
+                    showMessage('No news events discovered', 'error');
+                }
+            } catch (error) {
+                showMessage('Error discovering news: ' + error.message, 'error');
+            }
+        }
+        
+        async function showCoverageGaps() {
+            showMessage('Analyzing coverage...', 'success');
+            try {
+                const response = await fetch(`${API_BASE}/news/coverage-gaps`);
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const modal = document.getElementById('articleModal');
+                    const modalContent = document.getElementById('modalContent');
+                    
+                    modalContent.innerHTML = `
+                        <h2>📊 Coverage Analysis</h2>
+                        <p>Analyzing ${data.data.articleCount} current articles</p>
+                        <h3>Found ${data.data.gapCount} Coverage Gaps:</h3>
+                        ${data.data.gaps.length > 0 ? data.data.gaps.map(gap => `
+                            <div style="margin: 15px 0; padding: 15px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">
+                                <h4>${gap.angle}</h4>
+                                <p><strong>Topic:</strong> ${gap.topicId}</p>
+                                <p><strong>Reason:</strong> ${gap.reason}</p>
+                                <p><strong>Importance:</strong> ${gap.importance}/10</p>
+                            </div>
+                        `).join('') : '<p>No significant coverage gaps found!</p>'}
+                    `;
+                    
+                    modal.style.display = 'block';
+                } else {
+                    showMessage('Could not analyze coverage', 'error');
+                }
+            } catch (error) {
+                showMessage('Error analyzing coverage: ' + error.message, 'error');
+            }
+        }
     </script>
 </body>
 </html> 

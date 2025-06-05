@@ -3,6 +3,8 @@ import { getStorageService } from '../services/storageService';
 import { NewsGenerationService } from '../services/newsGenerationService';
 import { ConfigService } from '../services/configService';
 import { SchedulerService } from '../services/schedulerService';
+import { NewsDiscoveryService } from '../services/newsDiscoveryService';
+import { ArticleSelectionService } from '../services/articleSelectionService';
 import { 
   GetNewsRequest, 
   GenerateNewsRequest,
@@ -19,35 +21,118 @@ const storageService = getStorageService();
 const generationService = NewsGenerationService.getInstance();
 const configService = ConfigService.getInstance();
 const schedulerService = SchedulerService.getInstance();
+const discoveryService = NewsDiscoveryService.getInstance();
+const selectionService = ArticleSelectionService.getInstance();
 
-// GET /api/news - Get news articles
-router.get('/news', async (req: Request, res: Response) => {
+// Specific news routes
+// These must come before the parameterized /news/:id route
+
+// GET /api/news/discover - Discover recent news events
+router.get('/news/discover', async (req: Request, res: Response) => {
   try {
-    const query: GetNewsRequest = {
-      topicId: req.query.topicId as string,
-      limit: parseInt(req.query.limit as string) || 20,
-      offset: parseInt(req.query.offset as string) || 0,
-      sortBy: (req.query.sortBy as 'publishedAt' | 'topicId') || 'publishedAt',
-      sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'desc'
-    };
+    const hours = parseInt(req.query.hours as string) || 24;
+    const discovery = await discoveryService.discoverRecentNews(hours);
+    
+    res.json({
+      success: true,
+      data: discovery,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error discovering news', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
-    const articles = await storageService.getArticles(query);
-    const total = await storageService.getArticleCount();
+// GET /api/news/trending - Get trending stories
+router.get('/news/trending', async (_req: Request, res: Response) => {
+  try {
+    const trending = await discoveryService.findTrendingStories();
+    
+    res.json({
+      success: true,
+      data: {
+        stories: trending,
+        count: trending.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error getting trending stories', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
-    const response: NewsApiResponse<GetNewsResponse> = {
+// GET /api/news/coverage-gaps - Analyze coverage gaps
+router.get('/news/coverage-gaps', async (_req: Request, res: Response) => {
+  try {
+    const currentArticles = await storageService.getArticles({ limit: 100 });
+    const gaps = await discoveryService.identifyCoverageGaps(currentArticles);
+    
+    res.json({
+      success: true,
+      data: {
+        gaps,
+        gapCount: gaps.length,
+        articleCount: currentArticles.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error analyzing coverage gaps', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/news/analysis - Get current news mix analysis
+router.get('/news/analysis', async (_req: Request, res: Response) => {
+  try {
+    const currentArticles = await storageService.getArticles({ limit: 100 });
+    const analysis = await selectionService.analyzeCurrentMix(currentArticles);
+    
+    res.json({
+      success: true,
+      data: analysis,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error analyzing news mix', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/news/topic/:topicId - Get articles by topic
+router.get('/news/topic/:topicId', async (req: Request, res: Response) => {
+  try {
+    const articles = await storageService.getArticlesByTopic(req.params.topicId);
+    
+    res.json({
       success: true,
       data: {
         articles,
-        total,
-        limit: query.limit!,
-        offset: query.offset!
+        total: articles.length,
+        topicId: req.params.topicId
       },
       timestamp: new Date().toISOString()
-    };
-
-    res.json(response);
+    });
   } catch (error) {
-    logger.error('Error fetching news', { error });
+    logger.error('Error fetching articles by topic', { error, topicId: req.params.topicId });
     res.status(500).json({
       success: false,
       error: ERROR_MESSAGES.INTERNAL_ERROR,
@@ -84,22 +169,35 @@ router.get('/news/:id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/news/topic/:topicId - Get articles by topic
-router.get('/news/topic/:topicId', async (req: Request, res: Response) => {
+// General news routes
+// GET /api/news - Get news articles
+router.get('/news', async (req: Request, res: Response) => {
   try {
-    const articles = await storageService.getArticlesByTopic(req.params.topicId);
-    
-    res.json({
+    const query: GetNewsRequest = {
+      topicId: req.query.topicId as string,
+      limit: parseInt(req.query.limit as string) || 20,
+      offset: parseInt(req.query.offset as string) || 0,
+      sortBy: (req.query.sortBy as 'publishedAt' | 'topicId') || 'publishedAt',
+      sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'desc'
+    };
+
+    const articles = await storageService.getArticles(query);
+    const total = await storageService.getArticleCount();
+
+    const response: NewsApiResponse<GetNewsResponse> = {
       success: true,
       data: {
         articles,
-        total: articles.length,
-        topicId: req.params.topicId
+        total,
+        limit: query.limit!,
+        offset: query.offset!
       },
       timestamp: new Date().toISOString()
-    });
+    };
+
+    res.json(response);
   } catch (error) {
-    logger.error('Error fetching articles by topic', { error, topicId: req.params.topicId });
+    logger.error('Error fetching news', { error });
     res.status(500).json({
       success: false,
       error: ERROR_MESSAGES.INTERNAL_ERROR,
