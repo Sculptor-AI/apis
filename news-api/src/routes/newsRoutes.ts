@@ -432,7 +432,7 @@ router.get('/generation/history', async (_req: Request, res: Response) => {
 });
 
 // POST /api/reset - Reset all data (DANGER!)
-router.post('/reset', async (req: Request, res: Response) => {
+router.post('/reset', async (_req: Request, res: Response) => {
   try {
     logger.warn('Data reset requested');
     
@@ -450,7 +450,7 @@ router.post('/reset', async (req: Request, res: Response) => {
     
     logger.info('Data reset completed', resetResult);
     
-    res.json({
+    return res.json({
       success: true,
       data: {
         message: 'All data has been reset successfully',
@@ -460,7 +460,7 @@ router.post('/reset', async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error('Error resetting data', { error });
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: ERROR_MESSAGES.INTERNAL_ERROR,
       timestamp: new Date().toISOString()

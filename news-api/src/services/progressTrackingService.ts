@@ -6,8 +6,7 @@ import {
   DebugInfo,
   PhaseDebugInfo,
   ProgressEvent,
-  NewsGenerationCycle,
-  EnhancedNewsGenerationTask
+  NewsGenerationCycle
 } from '../types';
 import logger from '../utils/logger';
 

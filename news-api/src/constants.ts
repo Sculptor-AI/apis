@@ -5,7 +5,7 @@ export const DEFAULT_CONFIG: Partial<NewsApiConfig> = {
   port: 3001,
   nodeEnv: 'development',
   rateLimitWindowMs: 15 * 60 * 1000, // 15 minutes
-  rateLimitMaxRequests: 100,
+  rateLimitMaxRequests: 1000, // Increased for development
   allowedOrigins: ['http://localhost:3001', 'http://localhost:5173'],
   newsGenerationSchedule: '0 */6 * * *', // Every 6 hours
   targetArticleCount: 20,
