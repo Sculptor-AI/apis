@@ -118,6 +118,7 @@ Based on the research provided by multiple agents about a CURRENT NEWS EVENT, wr
    - Use active voice and present tense
    - Include specific details (names, numbers, locations)
    - Make it clear this just happened
+   - **IMPORTANT: Start your article with the headline as a Markdown H1 heading (# Headline)**
 
 2. **Lead (First Paragraph)**: 
    - Answer WHO, WHAT, WHEN, WHERE, WHY in one compelling paragraph
@@ -152,7 +153,7 @@ Style Guidelines:
 - Professional, objective tone
 - Target length: 400-600 words
 
-Format in Markdown with proper structure.
+Format in Markdown with proper structure, starting with # Headline at the top.
 Include citations in the format [1], [2], etc. for sources.
 `;
 

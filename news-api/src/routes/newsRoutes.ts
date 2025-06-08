@@ -5,13 +5,15 @@ import { ConfigService } from '../services/configService';
 import { SchedulerService } from '../services/schedulerService';
 import { NewsDiscoveryService } from '../services/newsDiscoveryService';
 import { ArticleSelectionService } from '../services/articleSelectionService';
+import { ProgressTrackingService } from '../services/progressTrackingService';
 import { 
   GetNewsRequest, 
   GenerateNewsRequest,
   NewsApiResponse,
   GetNewsResponse,
   GenerateNewsResponse,
-  NewsStats
+  NewsStats,
+  DebugApiResponse
 } from '../types';
 import { ERROR_MESSAGES } from '../constants';
 import logger from '../utils/logger';
@@ -23,6 +25,7 @@ const configService = ConfigService.getInstance();
 const schedulerService = SchedulerService.getInstance();
 const discoveryService = NewsDiscoveryService.getInstance();
 const selectionService = ArticleSelectionService.getInstance();
+const progressService = ProgressTrackingService.getInstance();
 
 // Specific news routes
 // These must come before the parameterized /news/:id route
@@ -332,6 +335,183 @@ router.get('/health', async (_req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   }
+});
+
+// GET /api/generation/progress - Get current generation progress
+router.get('/generation/progress', async (_req: Request, res: Response) => {
+  try {
+    const progress = progressService.getCurrentProgress();
+    
+    res.json({
+      success: true,
+      data: {
+        currentGeneration: progress
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error getting generation progress', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/debug/info - Get debug information
+router.get('/debug/info', async (_req: Request, res: Response) => {
+  try {
+    const debugInfo = progressService.getDebugInfo();
+    
+    const response: DebugApiResponse = {
+      success: true,
+      data: {
+        debugInfo
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    res.json(response);
+  } catch (error) {
+    logger.error('Error getting debug info', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/debug/logs - Get recent logs
+router.get('/debug/logs', async (req: Request, res: Response) => {
+  try {
+    const count = parseInt(req.query.count as string) || 100;
+    const logs = progressService.getRecentLogs(count);
+    
+    const response: DebugApiResponse = {
+      success: true,
+      data: {
+        logs
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    res.json(response);
+  } catch (error) {
+    logger.error('Error getting logs', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/generation/history - Get generation history
+router.get('/generation/history', async (_req: Request, res: Response) => {
+  try {
+    const debugInfo = progressService.getDebugInfo();
+    
+    res.json({
+      success: true,
+      data: {
+        history: debugInfo.generationHistory,
+        systemStatus: debugInfo.systemStatus
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error getting generation history', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// POST /api/reset - Reset all data (DANGER!)
+router.post('/reset', async (req: Request, res: Response) => {
+  try {
+    logger.warn('Data reset requested');
+    
+    // Check if there's an active generation
+    if (generationService.isCurrentlyGenerating()) {
+      return res.status(409).json({
+        success: false,
+        error: 'Cannot reset while generation is in progress',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Reset all data
+    const resetResult = await storageService.resetAllData();
+    
+    logger.info('Data reset completed', resetResult);
+    
+    res.json({
+      success: true,
+      data: {
+        message: 'All data has been reset successfully',
+        ...resetResult
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error resetting data', { error });
+    res.status(500).json({
+      success: false,
+      error: ERROR_MESSAGES.INTERNAL_ERROR,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/generation/stream - Server-Sent Events for real-time progress
+router.get('/generation/stream', async (req: Request, res: Response) => {
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  // Send initial connection message
+  res.write('data: {"type":"connected","message":"Connected to progress stream"}\n\n');
+
+  // Send current progress if any
+  const currentProgress = progressService.getCurrentProgress();
+  if (currentProgress) {
+    res.write(`data: ${JSON.stringify({ type: 'progress', data: currentProgress })}\n\n`);
+  }
+
+  // Set up event listeners
+  const progressHandler = (event: any) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  const logHandler = (log: any) => {
+    res.write(`data: ${JSON.stringify({ type: 'log', data: log })}\n\n`);
+  };
+
+  // Subscribe to progress events
+  progressService.on('progress', progressHandler);
+  progressService.on('log', logHandler);
+
+  // Keep connection alive with periodic pings
+  const pingInterval = setInterval(() => {
+    res.write(':ping\n\n');
+  }, 30000);
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    progressService.removeListener('progress', progressHandler);
+    progressService.removeListener('log', logHandler);
+    clearInterval(pingInterval);
+    res.end();
+  });
 });
 
 export default router; 

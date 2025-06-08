@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "clean": "rimraf dist",
     "test": "jest",
-    "generate-news": "tsx src/scripts/generateNews.ts"
+    "generate-news": "tsx src/scripts/generateNews.ts",
+    "reset": "node reset-data.js"
   },
   "keywords": ["ai", "news", "gemini", "api", "typescript", "autonomous"],
   "author": "News AI",

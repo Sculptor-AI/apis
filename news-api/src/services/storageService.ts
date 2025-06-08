@@ -253,6 +253,25 @@ export class InMemoryStorageService implements NewsStorageService {
       publishedAt: new Date()
     });
   }
+
+  async resetAllData(): Promise<{ articlesDeleted: number; cyclesDeleted: number }> {
+    const articlesCount = this.articles.size;
+    const cyclesCount = this.generationCycles.size;
+    
+    // Clear all data
+    this.articles.clear();
+    this.generationCycles.clear();
+    
+    // Persist empty state
+    this._persistStore();
+    
+    logger.info('All data reset', { articlesDeleted: articlesCount, cyclesDeleted: cyclesCount });
+    
+    return {
+      articlesDeleted: articlesCount,
+      cyclesDeleted: cyclesCount
+    };
+  }
 }
 
 // Singleton instance

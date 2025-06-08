@@ -16,6 +16,7 @@ import { getStorageService } from './storageService';
 import { ConfigService } from './configService';
 import { NewsDiscoveryService } from './newsDiscoveryService';
 import { ArticleSelectionService } from './articleSelectionService';
+import { ProgressTrackingService } from './progressTrackingService';
 import logger from '../utils/logger';
 
 export class NewsGenerationService {
@@ -26,11 +27,13 @@ export class NewsGenerationService {
   private storageService = getStorageService();
   private discoveryService: NewsDiscoveryService;
   private selectionService: ArticleSelectionService;
+  private progressService: ProgressTrackingService;
 
   private constructor() {
     this.configService = ConfigService.getInstance();
     this.discoveryService = NewsDiscoveryService.getInstance();
     this.selectionService = ArticleSelectionService.getInstance();
+    this.progressService = ProgressTrackingService.getInstance();
   }
 
   static getInstance(): NewsGenerationService {
@@ -61,7 +64,11 @@ export class NewsGenerationService {
     await this.storageService.saveGenerationCycle(cycle);
 
     try {
+      // Initialize progress tracking
+      this.progressService.startGeneration(cycle, 1); // Will update with actual count later
+
       // Step 1: Clean up expired articles first
+      this.progressService.updatePhase('initializing', 'Cleaning up expired articles...');
       const expiredArticles = await this.storageService.getExpiredArticles();
       for (const article of expiredArticles) {
         await this.storageService.deleteArticle(article.id);
@@ -69,6 +76,7 @@ export class NewsGenerationService {
       }
 
       // Step 2: Discover recent news events
+      this.progressService.updatePhase('discovery', 'Discovering recent news events...');
       logger.info('Discovering recent news events...');
       const newsDiscovery = await this.discoveryService.discoverRecentNews(24);
       
@@ -79,10 +87,16 @@ export class NewsGenerationService {
       logger.info(`Found ${newsDiscovery.events.length} news events`);
 
       // Step 3: Get current articles and identify coverage gaps
+      this.progressService.updatePhase('discovery', 'Analyzing coverage gaps...', { 
+        eventsFound: newsDiscovery.events.length 
+      });
       const currentArticles = await this.storageService.getArticles({ limit: 100 });
       const coverageGaps = await this.discoveryService.identifyCoverageGaps(currentArticles);
 
       // Step 4: Use AI to select which articles to write
+      this.progressService.updatePhase('selection', 'Selecting articles to write...', { 
+        gapsFound: coverageGaps.length 
+      });
       const selectionCriteria: ArticleSelectionCriteria = {
         currentArticles,
         recentEvents: newsDiscovery.events,
@@ -113,6 +127,12 @@ export class NewsGenerationService {
 
       logger.info(`AI selected ${assignments.length} articles to write`);
 
+      // Update progress with actual article count
+      this.progressService.startGeneration(cycle, assignments.length);
+      this.progressService.updatePhase('researching', `Researching and writing ${assignments.length} articles...`, { 
+        articlesToGenerate: assignments.length 
+      });
+
       // Step 6: Create generation tasks from assignments
       const tasks: NewsGenerationTask[] = assignments.map(assignment => ({
         id: uuidv4(),
@@ -135,7 +155,16 @@ export class NewsGenerationService {
       cycle.completedAt = new Date();
       cycle.status = 'completed';
 
+      // Update progress to publishing phase
+      this.progressService.updatePhase('publishing', 'Publishing articles and finalizing...', {
+        articlesGenerated: cycle.articlesGenerated
+      });
+
       await this.storageService.saveGenerationCycle(cycle);
+      
+      // Complete progress tracking
+      this.progressService.completeGeneration(cycle);
+      
       logger.info('News generation cycle completed', {
         cycleId: cycle.id,
         generated: cycle.articlesGenerated,
@@ -146,6 +175,12 @@ export class NewsGenerationService {
       cycle.status = 'failed';
       cycle.completedAt = new Date();
       await this.storageService.saveGenerationCycle(cycle);
+      
+      // Track error in progress
+      this.progressService.addError(error instanceof Error ? error.message : 'Unknown error', { cycleId: cycle.id });
+      this.progressService.updatePhase('failed', 'Generation failed', { error });
+      this.progressService.completeGeneration(cycle);
+      
       logger.error('News generation cycle failed', { error, cycleId: cycle.id });
       throw error;
     } finally {
@@ -207,9 +242,17 @@ export class NewsGenerationService {
     }
 
     try {
-      // Update task status
+      // Update task status and progress
       task.status = 'researching';
       task.progress = 10;
+      this.progressService.updateArticleProgress(
+        task.id,
+        task.topicId,
+        task.topicName,
+        10,
+        'Starting research...',
+        assignment.suggestedHeadline
+      );
 
       // Step 1: Get the news event details if available
       let eventContext = '';
@@ -227,15 +270,36 @@ export class NewsGenerationService {
         assignment.researchFocus.slice(0, config.researchAgentsPerArticle)
       );
       task.progress = 30;
+      this.progressService.updateArticleProgress(
+        task.id,
+        task.topicId,
+        task.topicName,
+        30,
+        `Configuring ${agents.length} research agents...`
+      );
 
       // Step 3: Run research agents in parallel with news focus
       task.status = 'researching';
       logger.debug('Running news research agents', { count: agents.length });
+      this.progressService.updateArticleProgress(
+        task.id,
+        task.topicId,
+        task.topicName,
+        50,
+        `Running ${agents.length} research agents...`
+      );
       const researchPromises = agents.map(agent => 
         this.runNewsResearchAgent(agent, eventContext)
       );
       const researchResults = await Promise.all(researchPromises);
       task.progress = 70;
+      this.progressService.updateArticleProgress(
+        task.id,
+        task.topicId,
+        task.topicName,
+        70,
+        'Research complete, synthesizing article...'
+      );
 
       // Collect all sources
       const allSources: Source[] = [];
@@ -257,6 +321,13 @@ export class NewsGenerationService {
       // Step 4: Synthesize news article with focus on timeliness
       task.status = 'writing';
       logger.debug('Synthesizing news article');
+      this.progressService.updateArticleProgress(
+        task.id,
+        task.topicId,
+        task.topicName,
+        80,
+        'Writing article...'
+      );
       const { content, summary } = await this.synthesizeNewsArticle(
         assignment.suggestedHeadline,
         researchResults,
@@ -264,9 +335,31 @@ export class NewsGenerationService {
         assignment.newsType
       );
       task.progress = 90;
+      this.progressService.updateArticleProgress(
+        task.id,
+        task.topicId,
+        task.topicName,
+        90,
+        'Finalizing article...'
+      );
 
       // Extract final headline from content
-      const finalHeadline = extractHeadlineFromContent(content) || assignment.suggestedHeadline;
+      const extractedHeadline = extractHeadlineFromContent(content);
+      const finalHeadline = extractedHeadline || assignment.suggestedHeadline;
+      
+      // Log if we had to use fallback headline
+      if (!extractedHeadline) {
+        logger.warn('No headline found in content, using suggested headline', {
+          newsType: assignment.newsType,
+          suggestedHeadline: assignment.suggestedHeadline,
+          contentPreview: content.substring(0, 200)
+        });
+      }
+      
+      // Ensure we always have a valid headline
+      if (!finalHeadline || finalHeadline.trim() === '') {
+        throw new Error(`Failed to generate headline for ${assignment.newsType} article on topic ${assignment.topicId}`);
+      }
 
       // Calculate metadata
       const wordCount = content.split(/\s+/).length;
@@ -307,6 +400,9 @@ export class NewsGenerationService {
       task.completedAt = new Date();
       task.articleId = article.id;
 
+      // Track completion
+      this.progressService.completeArticle(task.id, true);
+
       logger.info('News article generated successfully', {
         articleId: article.id,
         newsType: article.newsType,
@@ -319,6 +415,10 @@ export class NewsGenerationService {
       task.status = 'failed';
       task.error = error instanceof Error ? error.message : 'Unknown error';
       task.completedAt = new Date();
+      
+      // Track failure
+      this.progressService.completeArticle(task.id, false, task.error);
+      
       throw error;
     }
   }
@@ -350,13 +450,8 @@ export class NewsGenerationService {
   ): Promise<{ content: string; summary: string }> {
     const { synthesizeNewsArticle } = await import('./geminiService');
     
-    // Add news type context to synthesis
-    const enhancedResults = researchResults.map(r => ({
-      ...r,
-      newsType
-    }));
-    
-    return synthesizeNewsArticle(headline, enhancedResults, sources);
+    // Pass newsType directly to synthesizeNewsArticle
+    return synthesizeNewsArticle(headline, researchResults, sources, newsType);
   }
 
   private extractTags(assignment: ArticleAssignment, content: string): string[] {

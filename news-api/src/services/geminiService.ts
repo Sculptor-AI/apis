@@ -255,7 +255,8 @@ export const runNewsResearchAgent = async (
 export const synthesizeNewsArticle = async (
   headline: string,
   agentResults: AgentResearchResult[],
-  allSources: Source[]
+  allSources: Source[],
+  newsType?: string
 ): Promise<{ content: string; summary: string }> => {
   if (!ai) {
     throw new Error("Gemini service not initialized");
@@ -274,8 +275,11 @@ export const synthesizeNewsArticle = async (
 
     const synthesisPrompt = `
 Original Headline Suggestion: "${headline}"
+Article Type: ${newsType || 'news'}
 
 ${NEWS_SYNTHESIS_PROMPT}
+
+REMINDER: Your article MUST start with the headline as a Markdown H1 (# Headline).
 
 Sources available for citation:
 ${sourceList}
@@ -283,7 +287,7 @@ ${sourceList}
 Agent Research Summaries:
 ${agentSummaries}
 
-Generate the news article now.`;
+Generate the ${newsType || 'news'} article now with the headline "${headline}" formatted as # Headline at the top.`;
 
     const params: GenerateContentParameters = {
       model: GEMINI_PRO_MODEL, // Use Pro for final synthesis
@@ -328,12 +332,15 @@ Generate the news article now.`;
 };
 
 // Extract headline from article content
-export const extractHeadlineFromContent = (content: string): string => {
+export const extractHeadlineFromContent = (content: string): string | null => {
   const lines = content.split('\n');
   for (const line of lines) {
     if (line.startsWith('# ')) {
-      return line.substring(2).trim();
+      const headline = line.substring(2).trim();
+      if (headline.length > 0) {
+        return headline;
+      }
     }
   }
-  return 'Untitled Article';
+  return null;
 }; 

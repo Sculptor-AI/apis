@@ -276,4 +276,105 @@ export interface StoryTrackingService {
   getStoryClusters(): Promise<StoryCluster[]>;
   getStoryCluster(id: string): Promise<StoryCluster | null>;
   needsUpdate(clusterId: string): Promise<boolean>;
+}
+
+// Progress Tracking Types
+export interface GenerationProgress {
+  cycleId: string;
+  overallProgress: number; // 0-100
+  phase: 'initializing' | 'discovery' | 'selection' | 'researching' | 'writing' | 'publishing' | 'completed' | 'failed';
+  phaseDescription: string;
+  startTime: Date;
+  estimatedTimeRemaining?: number; // seconds
+  currentArticle?: {
+    taskId: string;
+    topicId: string;
+    topicName: string;
+    headline?: string;
+    progress: number;
+    phase: string;
+  };
+  articlesCompleted: number;
+  articlesTotal: number;
+  errors: string[];
+}
+
+// Debug Information Types
+export interface DebugInfo {
+  systemStatus: {
+    uptime: number;
+    memoryUsage: NodeJS.MemoryUsage;
+    activeGeneration: boolean;
+    lastError?: string;
+    errorCount: number;
+  };
+  generationHistory: GenerationDebugEntry[];
+  currentLogs: LogEntry[];
+}
+
+export interface GenerationDebugEntry {
+  cycleId: string;
+  startedAt: Date;
+  completedAt?: Date;
+  duration?: number; // milliseconds
+  success: boolean;
+  articlesGenerated: number;
+  errors: string[];
+  phases: PhaseDebugInfo[];
+}
+
+export interface PhaseDebugInfo {
+  name: string;
+  startTime: Date;
+  endTime?: Date;
+  duration?: number;
+  details: any;
+  errors?: string[];
+}
+
+export interface LogEntry {
+  timestamp: Date;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  context?: any;
+}
+
+// Enhanced Generation Types
+export interface EnhancedNewsGenerationTask extends NewsGenerationTask {
+  phases: TaskPhase[];
+  debugInfo: {
+    agentCount: number;
+    sourcesFound: number;
+    researchTime?: number;
+    synthesisTime?: number;
+    retryCount: number;
+  };
+}
+
+export interface TaskPhase {
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress: number;
+  startTime?: Date;
+  endTime?: Date;
+  details?: any;
+}
+
+// WebSocket/SSE Event Types
+export interface ProgressEvent {
+  type: 'progress' | 'article_completed' | 'cycle_completed' | 'error' | 'log';
+  timestamp: Date;
+  data: GenerationProgress | NewsArticle | GenerationDebugEntry | LogEntry | any;
+}
+
+// Enhanced API Response Types
+export interface DebugApiResponse {
+  success: boolean;
+  data?: {
+    currentGeneration?: GenerationProgress;
+    debugInfo?: DebugInfo;
+    logs?: LogEntry[];
+  };
+  error?: string;
+  timestamp: string;
 } 
